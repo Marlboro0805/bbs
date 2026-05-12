@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LITALICO BBS</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- CDNライブラリの読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <div id="app">
+      <header>
+        <h1>LITALICO BBS</h1>
+        <div class="category-filter">
+          <button
+            v-for="cat in categories"
+            :key="cat"
+            @click="currentCategory = cat"
+            :class="{ active: currentCategory === cat, omamori: cat === 'お守り' }"
+          >
+            <span v-if="cat === 'お守り'">🍀 </span>{{ cat }}
+          </button>
+        </div>
+      </header>
+
+      <main v-if="!selectedThread">
+        <!-- スレッド作成フォーム -->
+        <section class="post-form">
+          <div class="form-group">
+            <input
+              v-model="newThread.title"
+              placeholder="スレッドのタイトル（例：面接で聞かれたこと）"
+            />
+          </div>
+          <div class="form-group">
+            <select v-model="newThread.category">
+              <option disabled value="">カテゴリを選択してください</option>
+              <option v-for="cat in postCategories" :key="cat" :value="cat">
+                {{ cat }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <textarea
+              v-model="newThread.content"
+              placeholder="本文（Markdown形式で書けます）"
+              rows="4"
+            ></textarea>
+          </div>
+          <!-- 追加：非公開設定チェックボックス -->
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" v-model="newThread.isPrivate" />
+              🔒 管理者のみに公開する（他の利用者には見えません）
+            </label>
+          </div>
+          <div class="form-actions">
+            <button
+              class="btn-primary"
+              @click="createThread"
+              :disabled="!isThreadValid"
+            >
+              スレッドを立てる
+            </button>
+          </div>
+        </section>
+
+        <!-- スレッド一覧 -->
+        <ul class="thread-list">
+          <li v-for="thread in filteredThreads" :key="thread.id">
+            <div class="thread-item-content" @click="openThread(thread)">
+              <div class="thread-header">
+                <div>
+                  <span
+                    class="badge"
+                    :class="{ 'badge-omamori': thread.category === 'お守り' }"
+                    >{{ thread.category }}</span
+                  >
+                  <!-- 追加：非公開バッジ -->
+                  <span v-if="thread.isPrivate" class="badge badge-private"
+                    >🔒 非公開</span
+                  >
+                </div>
+                <small class="date">{{ formatDate(thread.createdAt) }}</small>
+              </div>
+              <h3>{{ thread.title }}</h3>
+              <div class="reaction-summary">
+                <span
+                  v-for="(count, emoji) in thread.reactions"
+                  :key="emoji"
+                  v-show="count > 0"
+                >
+                  {{ emoji }} {{ count }}
+                </span>
+              </div>
+            </div>
+            <!-- 管理者用削除ボタン -->
+            <button
+              v-if="isAdmin"
+              class="btn-delete"
+              @click.stop="deleteThread(thread.id)"
+            >
+              削除
+            </button>
+          </li>
+          <li v-if="filteredThreads.length === 0" class="empty-state">
+            スレッドがありません。
+          </li>
+        </ul>
+      </main>
+
+      <!-- スレッド詳細・コメント画面 -->
+      <main v-else>
+        <button class="btn-back" @click="selectedThread = null">
+          ← 一覧に戻る
+        </button>
+
+        <article class="thread-detail">
+          <div class="thread-header">
+            <div>
+              <span
+                class="badge"
+                :class="{ 'badge-omamori': selectedThread.category === 'お守り' }"
+                >{{ selectedThread.category }}</span
+              >
+              <!-- 追加：非公開バッジ -->
+              <span v-if="selectedThread.isPrivate" class="badge badge-private"
+                >🔒 非公開</span
+              >
+            </div>
+            <small class="date"
+              >{{ formatDate(selectedThread.createdAt) }}</small
+            >
+          </div>
+          <h2>{{ selectedThread.title }}</h2>
+          <div
+            class="markdown-body"
+            v-html="parseMarkdown(selectedThread.content)"
+          ></div>
+          <div class="reaction-bar">
+            <button
+              v-for="(count, emoji) in selectedThread.reactions"
+              :key="emoji"
+              class="btn-reaction"
+              @click="addReaction(selectedThread.id, emoji)"
+            >
+              {{ emoji }} <span class="count">{{ count }}</span>
+            </button>
+          </div>
+        </article>
+
+        <!-- コメント欄 -->
+        <section class="comments-section">
+          <h3>コメント ({{ comments.length }})</h3>
+          <ul class="comment-list">
+            <li
+              v-for="comment in comments"
+              :key="comment.id"
+              class="comment-item"
+            >
+              <div class="comment-header">
+                <small class="date">{{ formatDate(comment.createdAt) }}</small>
+                <!-- 管理者用削除ボタン -->
+                <button
+                  v-if="isAdmin"
+                  class="btn-delete btn-delete-small"
+                  @click="deleteComment(comment.id)"
+                >
+                  削除
+                </button>
+              </div>
+              <div
+                class="markdown-body"
+                v-html="parseMarkdown(comment.content)"
+              ></div>
+            </li>
+          </ul>
+
+          <div class="post-form comment-form">
+            <textarea
+              v-model="newCommentContent"
+              placeholder="コメントを追加...（Markdown可）"
+              rows="3"
+            ></textarea>
+            <div class="form-actions">
+              <button
+                class="btn-primary"
+                @click="addComment"
+                :disabled="!newCommentContent.trim()"
+              >
+                コメントする
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- フッター -->
+      <footer>
+        <button class="btn-admin-toggle" @click="toggleAdmin">
+          {{ isAdmin ? '管理者モード終了' : 'π' }}
+        </button>
+      </footer>
+    </div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
