@@ -173,6 +173,10 @@ createApp({
     };
 
     const addReaction = async (threadId, emoji) => {
+      if (selectedThread.value && selectedThread.value.id === threadId) {
+        selectedThread.value.reactions[emoji]++;
+      }
+      
       try {
         const threadRef = doc(db, 'threads', threadId);
         await updateDoc(threadRef, {
