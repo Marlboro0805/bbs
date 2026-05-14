@@ -101,7 +101,7 @@ createApp({
 
     const parseMarkdown = (text) => {
       if (!text) return '';
-      return window.marked.parse(text);
+      return window.marked.parse(text, { breaks: true });
     };
 
     const formatDate = (date) => {
@@ -173,10 +173,6 @@ createApp({
     };
 
     const addReaction = async (threadId, emoji) => {
-      if (selectedThread.value && selectedThread.value.id === threadId) {
-        selectedThread.value.reactions[emoji]++;
-      }
-      
       try {
         const threadRef = doc(db, 'threads', threadId);
         await updateDoc(threadRef, {
